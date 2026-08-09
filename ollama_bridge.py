@@ -21,7 +21,7 @@ MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b-instruct")
 
 
 class OllamaBridge:
-    def __init__(self, host=DEFAULT_HOST, model=MODEL, timeout=120):
+    def __init__(self, host=DEFAULT_HOST, model=MODEL, timeout=300):
         self.host = host.rstrip("/")
         self.model = model
         self.timeout = timeout
