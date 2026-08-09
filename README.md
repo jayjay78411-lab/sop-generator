@@ -13,7 +13,7 @@ Proxmox VE (LXC or Docker VM) but works on any Docker host.
 - `agent_browser.py` — Playwright agent (CDP connect, inject, record, `--watch` screen capture, export)
 - `browser_storage.js` — injected telemetry: click/input → CSS selector + URL + timestamp into Chrome `localStorage`
 - `export_factory.py` — routes session JSON to PDF (fpdf2 + screenshots), Canvas LMS (multipart), or editable array
-- `ollama_bridge.py` — `qwen2.5-instruct` client (httpx with urllib fallback)
+- `ollama_bridge.py` — `qwen2.5:7b-instruct` client (httpx with urllib fallback)
 - `web_control_panel.py` + `web/panel.html` — FastAPI control panel UI (record/export/describe)
 - `deploy_pve.sh` — one-shot deployment on a Proxmox/Docker host
 
@@ -24,7 +24,7 @@ bash deploy_pve.sh /opt/sopgen
 # or step-by-step:
 docker compose up -d --build
 docker compose exec sgen python3 /app/check_smoke.py
-docker compose exec ollama ollama pull qwen2.5-instruct
+docker compose exec ollama ollama pull qwen2.5:7b-instruct
 # open http://<proxmox-host>:8000
 ```
 
@@ -62,11 +62,11 @@ docker compose exec sgen python3 /app/export_factory.py /app/data/sessions/<id>.
 
 ## Web control panel + AI describe (Phase 2)
 The container runs the FastAPI panel on port 8000 alongside Xvfb Chrome; Ollama runs as a
-compose service (`qwen2.5-instruct`).
+compose service (`qwen2.5:7b-instruct`).
 
 ```bash
 # 1. pull the model into the ollama container
-docker compose exec ollama ollama pull qwen2.5-instruct
+docker compose exec ollama ollama pull qwen2.5:7b-instruct
 # 2. open the control panel
 #    http://<host>:8000   (record URL, stop & save, export, auto-describe via Ollama)
 # REST API:
