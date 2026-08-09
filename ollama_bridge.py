@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ollama bridge: internal-network client for a headless qwen2.5:2b-instruct instance."""
+"""Ollama bridge: internal-network client for a headless qwen2.5:3b instance."""
 import json
 import os
 import time
@@ -17,7 +17,7 @@ except ImportError:  # pragma: no cover
     _ur = None
 
 DEFAULT_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:2b-instruct")
+MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
 
 
 class OllamaBridge:
@@ -86,7 +86,7 @@ class OllamaBridge:
 if __name__ == "__main__":
     import argparse
 
-    ap = argparse.ArgumentParser(description="Ollama bridge smoke test (qwen2.5:2b-instruct)")
+    ap = argparse.ArgumentParser(description="Ollama bridge smoke test (qwen2.5:3b)")
     ap.add_argument("--session", default=None)
     ap.add_argument("--steps", default="data/sessions")
     args = ap.parse_args()
