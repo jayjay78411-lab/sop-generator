@@ -9,6 +9,7 @@ XVFB_PID=$!
 sleep 2
 
 mkdir -p /opt/chrome-profile
+rm -f /opt/chrome-profile/SingletonLock /opt/chrome-profile/SingletonSocket /opt/chrome-profile/SingletonCookie
 
 google-chrome \
     --no-sandbox \
