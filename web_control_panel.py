@@ -109,11 +109,15 @@ _thread.start()
 
 @app.on_event("startup")
 def _startup():
-    r = _call("connect")
-    if not r.get("ok"):
-        print("Agent browser NOT connected:", r.get("error"))
-    else:
-        print("Agent browser connected to", CDP_URL)
+    for attempt in range(15):
+        r = _call("connect", timeout=15)
+        if r.get("ok"):
+            print("Agent browser connected to", CDP_URL)
+            return
+        if attempt < 14:
+            print("agent connect attempt %d failed: %s (retrying)" % (attempt + 1, r.get("error")))
+            time.sleep(2)
+    print("Agent browser NOT connected:", r.get("error"))
 
 
 @app.on_event("shutdown")
