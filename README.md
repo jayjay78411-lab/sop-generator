@@ -1,5 +1,7 @@
 # SOP Generator — Server-Side Chrome Container (STEP 1)
 
+![CI](https://github.com/jayjay78411-lab/sop-generator/actions/workflows/ci.yml/badge.svg)
+
 Containerized Google Chrome + Xvfb environment for the SOP Generator, built for
 Proxmox VE (LXC or Docker VM) but works on any Docker host.
 
