@@ -48,7 +48,7 @@ COPY agent_browser.py browser_storage.js export_factory.py ollama_bridge.py web_
 COPY web/panel.html /app/web/panel.html
 COPY requirements.txt /app/requirements.txt
 RUN chmod +x /docker/entrypoint.sh \
-    && pip install --no-cache-dir -r /app/requirements.txt \
+    && pip install --no-cache-dir --break-system-packages -r /app/requirements.txt \
     && playwright install-deps chromium
 
 ENTRYPOINT ["/docker/entrypoint.sh"]
