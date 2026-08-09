@@ -9,7 +9,7 @@
 set -euo pipefail
 
 DEPLOY_DIR="${1:-/opt/sopgen}"
-OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:7b-instruct}"
+OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:2b-instruct}"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "ERROR: docker not found on this host. Install it first:"
