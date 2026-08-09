@@ -1,0 +1,5 @@
+[
+  {"type": "click", "selector": "html > body > div > p:nth-of-type(1)", "url": "http://example.com/", "text": "This domain is for use in documentation examples.", "ts": 1786273811295},
+  {"type": "input", "selector": "#email", "url": "http://example.com/login", "text": "email", "value": "bob@example.com", "ts": 1786273812000},
+  {"type": "click", "selector": "button[type=submit]", "url": "http://example.com/login", "text": "Sign in", "ts": 1786273812100}
+]

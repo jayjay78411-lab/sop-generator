@@ -1,0 +1,40 @@
+name: SOP Generator CI
+
+on:
+  push:
+    paths:
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "**.py"
+      - "browser_storage.js"
+      - "web/**"
+  pull_request:
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build container image
+        run: docker build -t sopgen:ci .
+
+      - name: Run Chrome/Xvfb smoke test
+        run: |
+          docker run -d --name sgen-ci \
+            -p 9222:9222 sopgen:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:9222/json/version; then break; fi
+            sleep 2
+          done
+          docker exec sgen-ci python3 /app/check_smoke.py
+
+      - name: Export factory unit check (mock session)
+        run: >
+          docker exec sgen-ci python3 -c "import importlib; from pathlib import Path; import json;
+          p=Path('/app/data/mock_session.json'); p.parent.mkdir(parents=True, exist_ok=True);
+          p.write_text(json.dumps([{'type':'click','selector':'#a','url':'http://x/'}]));
+          import sys; sys.path.insert(0,'/app');
+          from export_factory import build, load_session;
+          r=build(str(p),'pdf',out_dir='/app/data/ci_out');
+          import os; assert os.path.getsize(r['path'])>0; print('CI_OK pdf bytes=', r['bytes'])"

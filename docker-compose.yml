@@ -1,0 +1,34 @@
+services:
+  sgen:
+    build: .
+    container_name: sgen
+    restart: unless-stopped
+    ports:
+      - "9222:9222"
+      - "8000:8000"
+    environment:
+      - DISPLAY=:99
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - chrome-profile:/opt/chrome-profile
+    depends_on:
+      - ollama
+    networks:
+      - sopnet
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sop-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - sopnet
+
+volumes:
+  chrome-profile:
+  ollama-data:
+
+networks:
+  sopnet:
+    driver: bridge

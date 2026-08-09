@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Data artifacts (generated during recording/export)
+data/sessions/*.json
+data/shots/
+data/out/
+data/out*/
+*.pdf
+
+# Tooling / local
+.opencode/
+.aionrs/
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db

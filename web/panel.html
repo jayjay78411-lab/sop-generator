@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SOP Generator &mdash; Control Panel</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #0f1117; color: #e6e6e6; }
+    header { display: flex; align-items: center; gap: 12px; padding: 14px 22px; background: #171a23; border-bottom: 1px solid #2a2f3a; }
+    header h1 { font-size: 18px; margin: 0; }
+    main { max-width: 980px; margin: 0 auto; padding: 22px; }
+    .card { background: #171a23; border: 1px solid #2a2f3a; border-radius: 10px; padding: 18px; margin-bottom: 18px; }
+    input[type=url], select, button { font-size: 14px; padding: 8px 10px; border-radius: 6px; border: 1px solid #3a4150; background: #0f1117; color: #e6e6e6; }
+    button { cursor: pointer; background: #2563eb; border-color: #2563eb; }
+    button:hover { filter: brightness(1.15); }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    #output { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 13px; background: #0b0d12; padding: 12px; border-radius: 8px; border: 1px solid #2a2f3a; max-height: 480px; overflow: auto; }
+    .mut { opacity: .6; }
+    .badge { font-size: 12px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>&#9881; SOP Generator</h1>
+    <span class="badge" id="health"></span>
+  </header>
+  <main>
+    <div class="card">
+      <div class="row">
+        <input type="url" id="url" value="http://example.com" placeholder="Target URL" size="46">
+        <button onclick="record()">&#9654; Start Recording</button>
+        <button onclick="stopRecord()" disabled id="stopBtn">&#9632; Stop &amp; Save</button>
+        <button onclick="loadSessions()">&#8635; Refresh List</button>
+      </div>
+      <div class="badge" id="current" style="margin-top:10px;display:block"></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <select id="sessionSel"><option value="">&mdash; pick a saved session &mdash;</option></select>
+        <select id="exportTo">
+          <option value="pdf">PDF</option>
+          <option value="editor">Editor (JSON)</option>
+          <option value="canvas">Canvas LMS</option>
+        </select>
+        <button onclick="exportSession()">&#x2192; Export</button>
+        <button onclick="describeSession()">&#129302; Auto-describe (Ollama)</button>
+      </div>
+    </div>
+
+    <div class="card"><h3>Output</h3><div id="output">Waiting&hellip;</div></div>
+  </main>
+
+  <script>
+    let currentSession = null;
+
+    async function api(path, opts) {
+      const r = await fetch(path, opts);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((data.detail || r.statusText || 'request failed'));
+      return data;
+    }
+
+    function log(msg) { document.getElementById('output').textContent = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2); }
+
+    async function health() {
+      try {
+        const h = await api('/api/health');
+        document.getElementById('health').textContent =
+          'agent=' + (h.agent_connected ? 'connected' : 'offline') +
+          ' | ollama=' + (h.ollama_available ? 'up' : 'down') +
+          ' | sessions=' + h.sessions.length;
+      } catch (e) { document.getElementById('health').textContent = 'api error'; }
+    }
+
+    async function record() {
+      const url = document.getElementById('url').value.trim();
+      try {
+        const d = await api('/api/record/start', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        currentSession = d.sessionId;
+        document.getElementById('current').textContent = 'Recording ID ' + currentSession + ' — interact with the page, then Stop.';
+        document.getElementById('stopBtn').disabled = false;
+        log('Recording started: ' + currentSession);
+      } catch (e) { log('Error: ' + e.message); }
+    }
+
+    async function stopRecord() {
+      if (!currentSession) return;
+      try {
+        const d = await api('/api/record/' + currentSession + '/stop', { method: 'POST' });
+        log(d);
+        document.getElementById('stopBtn').disabled = true;
+        await loadSessions();
+      } catch (e) { log('Error: ' + e.message); }
+    }
+
+    async function loadSessions() {
+      const d = await api('/api/sessions');
+      const sel = document.getElementById('sessionSel');
+      sel.innerHTML = '<option value="">&mdash; pick a saved session &mdash;</option>' +
+        d.sessions.map(s => '<option value="' + s.sessionId + '">' + s.sessionId + ' (' + s.steps + ' steps)</option>').join('');
+      log('Sessions: ' + d.sessions.length);
+    }
+
+    async function exportSession() {
+      const sid = document.getElementById('sessionSel').value;
+      const to = document.getElementById('exportTo').value;
+      if (!sid) return log('Pick a session first.');
+      try {
+        const d = await api('/api/export/' + sid, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to })
+        });
+        log(d);
+      } catch (e) { log('Error: ' + e.message); }
+    }
+
+    async function describeSession() {
+      const sid = document.getElementById('sessionSel').value;
+      if (!sid) return log('Pick a session first.');
+      try {
+        const d = await api('/api/describe/' + sid, { method: 'POST' });
+        log(d.description);
+      } catch (e) { log('Error: ' + e.message); }
+    }
+
+    health();
+    loadSessions();
+  </script>
+</body>
+</html>
