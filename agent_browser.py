@@ -43,6 +43,19 @@ class AgentBrowser:
     def info(self, page):
         return page.evaluate("() => window.__sopInfo()")
 
+    def viewport(self, page):
+        """Return the current page viewport as PNG bytes (for live view in the panel)."""
+        return page.screenshot(type="png")
+
+    def click_at(self, page, x, y):
+        page.mouse.click(x, y)
+
+    def type_text(self, page, text):
+        page.keyboard.type(text)
+
+    def press_key(self, page, key):
+        page.keyboard.press(key)
+
     def shot(self, page, session_id, index, viewport_only=True):
         """Capture the current browser screen view for a session step (synchronous)."""
         snap_dir = self.persist_dir / "shots" / (session_id or "anon")

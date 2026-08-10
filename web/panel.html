@@ -6,33 +6,63 @@
   <title>SOP Generator &mdash; Control Panel</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; background: #0f1117; color: #e6e6e6; }
-    header { display: flex; align-items: center; gap: 12px; padding: 14px 22px; background: #171a23; border-bottom: 1px solid #2a2f3a; }
+    header { display: flex; align-items: center; gap: 12px; padding: 14px 22px; background: #171a23; border-bottom: 1px solid #2a2f3a; flex-wrap: wrap; }
     header h1 { font-size: 18px; margin: 0; }
-    main { max-width: 980px; margin: 0 auto; padding: 22px; }
+    main { max-width: 1080px; margin: 0 auto; padding: 22px; }
     .card { background: #171a23; border: 1px solid #2a2f3a; border-radius: 10px; padding: 18px; margin-bottom: 18px; }
-    input[type=url], select, button { font-size: 14px; padding: 8px 10px; border-radius: 6px; border: 1px solid #3a4150; background: #0f1117; color: #e6e6e6; }
+    input[type=url], select, button, input[type=text] { font-size: 14px; padding: 8px 10px; border-radius: 6px; border: 1px solid #3a4150; background: #0f1117; color: #e6e6e6; }
     button { cursor: pointer; background: #2563eb; border-color: #2563eb; }
     button:hover { filter: brightness(1.15); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     #output { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 13px; background: #0b0d12; padding: 12px; border-radius: 8px; border: 1px solid #2a2f3a; max-height: 480px; overflow: auto; }
     .mut { opacity: .6; }
-    .badge { font-size: 12px; color: #9ca3af; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid #2a2f3a; background: #0f1117; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #6b7280; }
+    .dot.ok { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+    .dot.bad { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+    .rec { display: inline-flex; align-items: center; gap: 8px; color: #fca5a5; font-weight: 700; letter-spacing: .08em; }
+    .rec .blink { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: .2; } 100% { opacity: 1; } }
+    #livebox { border: 1px solid #3a4150; border-radius: 8px; overflow: hidden; background: #0b0d12; margin-top: 12px; display: none; }
+    #live { display: block; width: 100%; max-width: 100%; cursor: crosshair; }
+    #stepsfeed { font-size: 12px; font-family: ui-monospace, monospace; margin-top: 8px; max-height: 160px; overflow: auto; }
+    #stepsfeed .s { padding: 2px 4px; border-left: 2px solid #3a4150; margin: 2px 0; }
+    .kbd { font-size: 11px; padding: 5px 8px; border: 1px solid #3a4150; border-radius: 5px; background: #0f1117; cursor: pointer; }
+    .kbd:hover { filter: brightness(1.3); }
+    .hint { font-size: 13px; color: #9ca3af; line-height: 1.6; }
   </style>
 </head>
 <body>
   <header>
     <h1>&#9881; SOP Generator</h1>
-    <span class="badge" id="health"></span>
+    <span class="pill"><span class="dot" id="dotAgent"></span> Agent <span id="txtAgent">waiting</span></span>
+    <span class="pill"><span class="dot" id="dotOllama"></span> Ollama <span id="txtOllama">waiting</span> <span id="txtModel" class="mut"></span></span>
+    <span class="pill"><span class="dot" id="dotSessions"></span> Saved <span id="txtSessions">0</span></span>
   </header>
   <main>
     <div class="card">
       <div class="row">
         <input type="url" id="url" value="http://example.com" placeholder="Target URL" size="46">
-        <button onclick="record()">&#9654; Start Recording</button>
+        <button onclick="record()" id="startBtn">&#9654; Start Recording</button>
         <button onclick="stopRecord()" disabled id="stopBtn">&#9632; Stop &amp; Save</button>
         <button onclick="loadSessions()">&#8635; Refresh List</button>
+        <span id="recBadge" style="display:none" class="rec"><span class="blink"></span> RECORDING</span>
       </div>
       <div class="badge" id="current" style="margin-top:10px;display:block"></div>
+      <p class="hint" id="hint">Click Start Recording to open the target page in the recording browser below. Interact with the live view (click or type) to record each step, then Stop &amp; Save.</p>
+      <div id="livebox">
+        <img id="live" alt="live view">
+        <div class="row" style="padding:8px">
+          <input type="text" id="typeText" placeholder="Type text into the page..." size="26">
+          <button id="typeBtn">Type</button>
+          <button class="kbd" data-enter="Tab">Tab</button>
+          <button class="kbd" data-enter="Enter">Enter</button>
+          <button class="kbd" data-enter="Escape">Esc</button>
+          <span class="mut" id="stepCount"></span>
+        </div>
+        <div id="stepsfeed"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -44,6 +74,7 @@
           <option value="canvas">Canvas LMS</option>
         </select>
         <button onclick="exportSession()">&#x2192; Export</button>
+        <a id="downloadLink" style="display:none">&#8595; Download</a>
         <button onclick="describeSession()">&#129302; Auto-describe (Ollama)</button>
       </div>
     </div>
@@ -53,6 +84,7 @@
 
   <script>
     let currentSession = null;
+    let pollTimer = null;
 
     async function api(path, opts) {
       const r = await fetch(path, opts);
@@ -66,11 +98,21 @@
     async function health() {
       try {
         const h = await api('/api/health');
-        document.getElementById('health').textContent =
-          'agent=' + (h.agent_connected ? 'connected' : 'offline') +
-          ' | ollama=' + (h.ollama_available ? 'up' : 'down') +
-          ' | sessions=' + h.sessions.length;
-      } catch (e) { document.getElementById('health').textContent = 'api error'; }
+        const setDot = (id, ok) => {
+          const el = document.getElementById(id);
+          el.className = 'dot ' + (ok ? 'ok' : 'bad');
+        };
+        setDot('dotAgent', h.agent_connected);
+        setDot('dotOllama', h.ollama_available);
+        document.getElementById('txtAgent').textContent = h.agent_connected ? 'connected' : 'offline';
+        document.getElementById('txtOllama').textContent = h.ollama_available ? 'up' : 'down';
+        document.getElementById('txtModel').textContent = h.ollama_model ? '(' + h.ollama_model + ')' : '';
+        document.getElementById('txtSessions').textContent = h.sessions.length;
+      } catch (e) {
+        document.getElementById('dotAgent').className = 'dot bad';
+        document.getElementById('dotOllama').className = 'dot bad';
+        document.getElementById('txtAgent').textContent = 'api error';
+      }
     }
 
     async function record() {
@@ -81,9 +123,95 @@
           body: JSON.stringify({ url })
         });
         currentSession = d.sessionId;
-        document.getElementById('current').textContent = 'Recording ID ' + currentSession + ' — interact with the page, then Stop.';
+        document.getElementById('current').textContent = 'Recording ' + currentSession + ' against ' + d.url;
+        document.getElementById('recBadge').style.display = 'inline-flex';
+        document.getElementById('hint').style.display = 'none';
+        document.getElementById('livebox').style.display = 'block';
+        document.getElementById('startBtn').disabled = true;
         document.getElementById('stopBtn').disabled = false;
-        log('Recording started: ' + currentSession);
+        document.getElementById('stepsfeed').innerHTML = '<div class="mut">Loading live view &hellip; click or type below to record steps.</div>';
+        await refreshLive();
+        pollTimer = setInterval(pollLive, 1500);
+      } catch (e) { log('Error: ' + e.message); }
+    }
+
+    function liveUrl() {
+      return '/api/record/' + currentSession + '/viewport.png';
+    }
+
+    async function refreshLive() {
+      const img = document.getElementById('live');
+      img.src = liveUrl();
+      return new Promise((res, rej) => {
+        img.onload = () => { img.onload = null; res(); };
+        img.onerror = () => { img.onerror = null; rej(new Error('viewport load failed')); };
+      });
+    }
+
+    async function pollLive() {
+      if (!currentSession) return;
+      const img = document.getElementById('live');
+      const tmp = new Image();
+      tmp.crossOrigin = 'anonymous';
+      tmp.src = liveUrl();
+      tmp.onload = () => { img.src = tmp.src; refreshSteps(); };
+      tmp.onerror = () => {};
+    }
+
+    async function refreshSteps() {
+      if (!currentSession) return;
+      try {
+        const d = await api('/api/record/' + currentSession + '/steps');
+        const n = d.steps.length;
+        document.getElementById('stepCount').textContent = n + (n === 1 ? ' step recorded' : ' steps recorded');
+        const feed = document.getElementById('stepsfeed');
+        const last = n > 0 ? d.steps[n - 1] : null;
+        if (!last) { feed.innerHTML = '<div class="mut">No steps yet - click or type in the live view above.</div>'; return; }
+        const div = document.createElement('div');
+        div.className = 's';
+        div.textContent = '#' + n + ' [' + (last.type || 'step') + '] ' + (last.selector || last.url || 'page');
+        if (last.value) div.textContent += ' = ' + last.value;
+        if (feed.childElementCount > 200) feed.innerHTML = '';
+        feed.appendChild(div);
+        feed.scrollTop = feed.scrollHeight;
+      } catch (e) {}
+    }
+
+    async function clickAt(ev) {
+      if (!currentSession) return;
+      const img = document.getElementById('live');
+      const rect = img.getBoundingClientRect();
+      const x = Math.round((ev.clientX - rect.left) / rect.width * img.naturalWidth);
+      const y = Math.round((ev.clientY - rect.top) / rect.height * img.naturalHeight);
+      try {
+        await api('/api/record/' + currentSession + '/click', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ x, y })
+        });
+      } catch (e) { log('Error: ' + e.message); }
+    }
+
+    async function sendType() {
+      if (!currentSession) return;
+      const el = document.getElementById('typeText');
+      const text = el.value;
+      if (!text) return;
+      try {
+        await api('/api/record/' + currentSession + '/type', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        el.value = '';
+      } catch (e) { log('Error: ' + e.message); }
+    }
+
+    async function sendKey(k) {
+      if (!currentSession) return;
+      try {
+        await api('/api/record/' + currentSession + '/key', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: k })
+        });
       } catch (e) { log('Error: ' + e.message); }
     }
 
@@ -91,44 +219,69 @@
       if (!currentSession) return;
       try {
         const d = await api('/api/record/' + currentSession + '/stop', { method: 'POST' });
-        log(d);
+        clearInterval(pollTimer);
+        document.getElementById('recBadge').style.display = 'none';
         document.getElementById('stopBtn').disabled = true;
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('current').textContent = d.steps + ' steps saved to session ' + d.sessionId;
+        currentSession = null;
         await loadSessions();
+        document.getElementById('sessionSel').value = d.sessionId;
       } catch (e) { log('Error: ' + e.message); }
     }
 
     async function loadSessions() {
       const d = await api('/api/sessions');
       const sel = document.getElementById('sessionSel');
+      const cur = sel.value;
       sel.innerHTML = '<option value="">&mdash; pick a saved session &mdash;</option>' +
         d.sessions.map(s => '<option value="' + s.sessionId + '">' + s.sessionId + ' (' + s.steps + ' steps)</option>').join('');
-      log('Sessions: ' + d.sessions.length);
+      if (d.sessions.some(s => s.sessionId === cur)) sel.value = cur;
+      health();
     }
 
     async function exportSession() {
       const sid = document.getElementById('sessionSel').value;
       const to = document.getElementById('exportTo').value;
+      const link = document.getElementById('downloadLink');
+      link.style.display = 'none';
       if (!sid) return log('Pick a session first.');
-      try {
-        const d = await api('/api/export/' + sid, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to })
-        });
-        log(d);
-      } catch (e) { log('Error: ' + e.message); }
+      if (to === 'canvas') {
+        try {
+          const d = await api('/api/export/' + sid, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to })
+          });
+          log(d);
+        } catch (e) { log('Error: ' + e.message); }
+        return;
+      }
+      link.href = '/api/export/' + sid + '/download?to=' + to;
+      link.download = sid + (to === 'editor' ? '.json' : '.pdf');
+      link.textContent = ' Download ' + link.download;
+      link.style.display = 'inline';
+      log('Export ready - click Download to save the file.');
     }
 
     async function describeSession() {
       const sid = document.getElementById('sessionSel').value;
       if (!sid) return log('Pick a session first.');
       try {
+        log('Describing ' + sid + ' with Ollama (' + document.getElementById('txtModel').textContent + ') - this can take a few minutes on slow hardware...');
         const d = await api('/api/describe/' + sid, { method: 'POST' });
         log(d.description);
+        health();
       } catch (e) { log('Error: ' + e.message); }
     }
 
+    document.getElementById('live').addEventListener('click', clickAt);
+    document.getElementById('typeBtn').addEventListener('click', sendType);
+    document.getElementById('typeText').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); sendType(); } });
+    document.querySelectorAll('.kbd').forEach(b => b.addEventListener('click', () => sendKey(b.dataset.enter)));
+
     health();
     loadSessions();
+    setInterval(health, 15000);
   </script>
 </body>
 </html>

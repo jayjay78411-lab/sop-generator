@@ -13,7 +13,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
 from agent_browser import AgentBrowser, CDP_ENDPOINT
@@ -39,6 +39,13 @@ _resp = {}
 
 class RecordRequest(BaseModel):
     url: str
+
+
+class InteractionRequest(BaseModel):
+    x: int | None = None
+    y: int | None = None
+    text: str | None = None
+    key: str | None = None
 
 
 class ExportRequest(BaseModel):
@@ -70,6 +77,18 @@ def _agent_worker():
                     PAGES[args["sid"]].close()
                 finally:
                     PAGES.pop(args["sid"], None)
+                _resp[cid] = {"ok": True}
+            elif cmd == "view":
+                shot = agent.viewport(PAGES[args["sid"]])
+                _resp[cid] = {"ok": True, "png": shot}
+            elif cmd == "click":
+                agent.click_at(PAGES[args["sid"]], args["x"], args["y"])
+                _resp[cid] = {"ok": True, "x": args["x"], "y": args["y"]}
+            elif cmd == "type":
+                agent.type_text(PAGES[args["sid"]], args["text"])
+                _resp[cid] = {"ok": True}
+            elif cmd == "key":
+                agent.press_key(PAGES[args["sid"]], args["key"])
                 _resp[cid] = {"ok": True}
             elif cmd == "stop":
                 break
@@ -135,10 +154,16 @@ def index():
 
 @app.get("/api/health")
 def health():
+    ollama = None
+    try:
+        ollama = bool(OLLAMA.available())
+    except Exception:
+        pass
     return {
         "ok": True,
         "agent_connected": agent_connected(),
-        "ollama_available": bool(OLLAMA.available()),
+        "ollama_available": bool(ollama),
+        "ollama_model": OLLAMA.model,
         "sessions": [k for k in PAGES.keys()],
     }
 
@@ -152,12 +177,72 @@ def record_start(req: RecordRequest):
     return {"sessionId": sid, "url": req.url}
 
 
+@app.get("/api/record/{sid}/viewport.png")
+def record_viewport(sid: str):
+    if sid not in PAGES:
+        raise HTTPException(404, "no such active session")
+    try:
+        shot = _call("view", {"sid": sid}).get("png")
+    except Exception as exc:
+        raise HTTPException(502, "viewport failed: %s" % exc)
+    return Response(content=shot, media_type="image/png")
+
+
+@app.post("/api/record/{sid}/click")
+def record_click(sid: str, req: InteractionRequest):
+    if sid not in PAGES:
+        raise HTTPException(404, "no such active session")
+    if req.x is None or req.y is None:
+        raise HTTPException(422, "x and y required")
+    try:
+        r = _call("click", {"sid": sid, "x": req.x, "y": req.y})
+    except Exception as exc:
+        raise HTTPException(502, "click failed: %s" % exc)
+    return {"ok": True, "x": r.get("x"), "y": r.get("y")}
+
+
+@app.post("/api/record/{sid}/type")
+def record_type(sid: str, req: InteractionRequest):
+    if sid not in PAGES:
+        raise HTTPException(404, "no such active session")
+    if not req.text:
+        raise HTTPException(422, "text required")
+    try:
+        _call("type", {"sid": sid, "text": req.text})
+    except Exception as exc:
+        raise HTTPException(502, "type failed: %s" % exc)
+    return {"ok": True}
+
+
+@app.post("/api/record/{sid}/key")
+def record_key(sid: str, req: InteractionRequest):
+    if sid not in PAGES:
+        raise HTTPException(404, "no such active session")
+    if not req.key:
+        raise HTTPException(422, "key required")
+    try:
+        _call("key", {"sid": sid, "key": req.key})
+    except Exception as exc:
+        raise HTTPException(502, "key failed: %s" % exc)
+    return {"ok": True}
+
+
 @app.post("/api/record/{sid}/stop")
 def record_stop(sid: str):
     if sid not in PAGES:
         raise HTTPException(404, "no such active session")
-    r = _call("close_page", {"sid": sid})
-    return {"sessionId": sid, "closed": True}
+    r = _call("sweep", {"sid": sid})
+    steps = r.get("steps", [])
+    payload = {
+        "sessionId": sid,
+        "exportedAt": time.time(),
+        "steps": steps,
+        "url": PAGES[sid].url if PAGES[sid] else None,
+    }
+    out = SESSIONS_DIR / (sid + ".json")
+    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _call("close_page", {"sid": sid})
+    return {"sessionId": sid, "closed": True, "steps": len(steps), "saved": str(out)}
 
 
 @app.get("/api/record/{sid}/steps")
@@ -189,6 +274,40 @@ def session_export(sid: str, body: ExportRequest):
         result = export_build(str(path), body.to, canvas_cfg(), body.out or str(OUT_DIR))
     except Exception as exc:
         raise HTTPException(500, "export failed: %s" % exc)
+    return {"ok": True, "result": result}
+
+
+@app.get("/api/export/{sid}/download")
+def session_export_download(sid: str, to: str = "pdf"):
+    path = SESSIONS_DIR / (sid + ".json")
+    if not path.exists():
+        raise HTTPException(404, "session file not found")
+    try:
+        result = export_build(str(path), to, canvas_cfg(), str(OUT_DIR))
+    except Exception as exc:
+        raise HTTPException(500, "export failed: %s" % exc)
+    if to == "pdf":
+        fpath = result.get("path")
+        if not fpath or not Path(fpath).exists():
+            raise HTTPException(500, "pdf not generated")
+        return Response(
+            content=Path(fpath).read_bytes(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="%s.pdf"' % sid},
+        )
+    if to == "editor":
+        return Response(
+            content=json.dumps(result.get("steps", []), indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": 'attachment; filename="%s.json"' % sid},
+        )
+    path = result.get("path")
+    if path and Path(path).exists():
+        return Response(
+            content=Path(path).read_bytes(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="%s.pdf"' % sid},
+        )
     return {"ok": True, "result": result}
 
 
