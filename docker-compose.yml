@@ -11,6 +11,7 @@ services:
       - OLLAMA_HOST=http://ollama:11434
     volumes:
       - chrome-profile:/opt/chrome-profile
+      - sop-data:/app/data
     depends_on:
       - ollama
     networks:
@@ -27,6 +28,7 @@ services:
 
 volumes:
   chrome-profile:
+  sop-data:
   ollama-data:
 
 networks:
