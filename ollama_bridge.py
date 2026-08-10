@@ -44,9 +44,16 @@ class OllamaBridge:
 
     def describe_session(self, steps, session_id=None):
         brief = []
+        seen = set()
         for s in steps or []:
+            key = (s.get("type"), s.get("selector"), (s.get("text") or "")[:40].strip())
+            if key in seen:
+                continue
+            seen.add(key)
             detail = " ".join(x for x in [s.get("url"), s.get("selector"), (s.get("text") or "")[:80]] if x)
             brief.append("- [%s] %s" % (s.get("type", "step"), detail))
+            if len(brief) >= 6:
+                break
         system = (
             "You are an SOP writer. Convert recorded browser interaction steps into clear, "
             "numbered procedural instructions. Use the exact past tense of the action. "
@@ -56,7 +63,7 @@ class OllamaBridge:
             (" " + session_id) if session_id else "",
             "\n".join(brief[:40]) or "(no steps recorded)",
         )
-        return self.generate(prompt, system=system, options={"num_predict": 350, "temperature": 0.5})
+        return self.generate(prompt, system=system, options={"num_predict": 100, "temperature": 0.5})
 
     def _post(self, path, payload):
         body = json.dumps(payload).encode("utf-8")
