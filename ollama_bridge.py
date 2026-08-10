@@ -56,7 +56,7 @@ class OllamaBridge:
             (" " + session_id) if session_id else "",
             "\n".join(brief[:40]) or "(no steps recorded)",
         )
-        return self.generate(prompt, system=system)
+        return self.generate(prompt, system=system, options={"num_predict": 350, "temperature": 0.5})
 
     def _post(self, path, payload):
         body = json.dumps(payload).encode("utf-8")
