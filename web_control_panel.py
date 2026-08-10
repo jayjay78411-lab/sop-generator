@@ -159,12 +159,14 @@ def health():
         ollama = bool(OLLAMA.available())
     except Exception:
         pass
+    saved = len(list(SESSIONS_DIR.glob("*.json")))
     return {
         "ok": True,
         "agent_connected": agent_connected(),
         "ollama_available": bool(ollama),
         "ollama_model": OLLAMA.model,
         "sessions": [k for k in PAGES.keys()],
+        "saved_sessions": saved,
     }
 
 

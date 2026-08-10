@@ -85,6 +85,7 @@
   <script>
     let currentSession = null;
     let pollTimer = null;
+    let lastStepFeed = 0;
 
     async function api(path, opts) {
       const r = await fetch(path, opts);
@@ -107,7 +108,7 @@
         document.getElementById('txtAgent').textContent = h.agent_connected ? 'connected' : 'offline';
         document.getElementById('txtOllama').textContent = h.ollama_available ? 'up' : 'down';
         document.getElementById('txtModel').textContent = h.ollama_model ? '(' + h.ollama_model + ')' : '';
-        document.getElementById('txtSessions').textContent = h.sessions.length;
+        document.getElementById('txtSessions').textContent = h.saved_sessions || 0;
       } catch (e) {
         document.getElementById('dotAgent').className = 'dot bad';
         document.getElementById('dotOllama').className = 'dot bad';
@@ -129,6 +130,7 @@
         document.getElementById('livebox').style.display = 'block';
         document.getElementById('startBtn').disabled = true;
         document.getElementById('stopBtn').disabled = false;
+        lastStepFeed = 0;
         document.getElementById('stepsfeed').innerHTML = '<div class="mut">Loading live view &hellip; click or type below to record steps.</div>';
         await refreshLive();
         pollTimer = setInterval(pollLive, 1500);
@@ -162,18 +164,27 @@
       if (!currentSession) return;
       try {
         const d = await api('/api/record/' + currentSession + '/steps');
-        const n = d.steps.length;
+        const steps = d.steps;
+        const n = steps.length;
         document.getElementById('stepCount').textContent = n + (n === 1 ? ' step recorded' : ' steps recorded');
         const feed = document.getElementById('stepsfeed');
-        const last = n > 0 ? d.steps[n - 1] : null;
-        if (!last) { feed.innerHTML = '<div class="mut">No steps yet - click or type in the live view above.</div>'; return; }
-        const div = document.createElement('div');
-        div.className = 's';
-        div.textContent = '#' + n + ' [' + (last.type || 'step') + '] ' + (last.selector || last.url || 'page');
-        if (last.value) div.textContent += ' = ' + last.value;
-        if (feed.childElementCount > 200) feed.innerHTML = '';
-        feed.appendChild(div);
-        feed.scrollTop = feed.scrollHeight;
+        if (n === 0) {
+          feed.innerHTML = '<div class="mut">No steps yet - click or type in the live view above.</div>';
+          lastStepFeed = 0;
+          return;
+        }
+        if (n > lastStepFeed) {
+          for (let i = lastStepFeed; i < n; i++) {
+            const s = steps[i];
+            const div = document.createElement('div');
+            div.className = 's';
+            div.textContent = '#' + (i + 1) + ' [' + (s.type || 'step') + '] ' + (s.selector || s.url || 'page');
+            if (s.value) div.textContent += ' = ' + s.value;
+            feed.appendChild(div);
+          }
+          lastStepFeed = n;
+          feed.scrollTop = feed.scrollHeight;
+        }
       } catch (e) {}
     }
 
